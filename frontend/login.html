@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaterWatch – Sign In</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/3105/3105807.png">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Load Auth Script first to see if they're already logged in -->
+  <script src="js/auth.js"></script>
+</head>
+<body style="min-height: 100vh; display: flex; justify-content: center; align-items: center; background: var(--bg-gradient); padding: 1.5rem; position: relative; overflow: hidden;">
+
+  <!-- Decorative Animated Wave Vectors in background -->
+  <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 180px; z-index: 1; pointer-events: none; opacity: 0.18;">
+    <svg viewBox="0 0 1200 120" preserveAspectRatio="none" style="width: 100%; height: 100%;">
+      <path d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V120H0V0C26.9,8.75,55.05,17.43,84.4,24.36,163.66,43,248.8,69.58,321.39,56.44Z" fill="var(--primary)"></path>
+    </svg>
+  </div>
+  <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 210px; z-index: 1; pointer-events: none; opacity: 0.1; transform: scaleX(-1);">
+    <svg viewBox="0 0 1200 120" preserveAspectRatio="none" style="width: 100%; height: 100%;">
+      <path d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V120H0V0C26.9,8.75,55.05,17.43,84.4,24.36,163.66,43,248.8,69.58,321.39,56.44Z" fill="var(--accent)"></path>
+    </svg>
+  </div>
+
+  <!-- Login Card container -->
+  <div class="card login-card" style="width: 100%; max-width: 480px; z-index: 10; position: relative; padding: 2.5rem 2rem; border-radius: var(--radius-lg); background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 20px 50px rgba(0, 119, 182, 0.15); border: 1px solid rgba(255, 255, 255, 0.7); animation: fadeIn 0.4s ease-out;">
+    
+    <!-- Droplet Header Logo -->
+    <div style="text-align: center; margin-bottom: 2rem;">
+      <div style="width: 60px; height: 60px; background: #E0F2FE; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto; box-shadow: 0 4px 14px rgba(0, 119, 182, 0.12); animation: float 3s ease-in-out infinite;">
+        <svg viewBox="0 0 24 24" style="width: 32px; height: 32px; fill: var(--primary);">
+          <path d="M12,2C12,2 6,8.8 6,13C6,16.3 8.7,19 12,19C15.3,19 18,16.3 18,13C18,8.8 12,2 12,2ZM12,17C9.8,17 8,15.2 8,13C8,11.2 9.5,8.8 12,5.6C14.5,8.8 16,11.2 16,13C16,15.2 14.2,17 12,17Z"/>
+        </svg>
+      </div>
+      <h1 style="font-size: 1.75rem; color: var(--primary-dark)">Welcome to WaterWatch</h1>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">Select your portal below to sign in.</p>
+    </div>
+
+    <!-- Login Tabs -->
+    <div class="login-tabs" style="display: flex; gap: 0.5rem; background: #F1F5F9; padding: 0.35rem; border-radius: var(--radius-md); margin-bottom: 2rem; border: 1px solid var(--border);">
+      <button type="button" id="tabCitizen" class="login-tab-btn active" style="flex: 1; padding: 0.65rem; border: none; background: none; font-family: 'Sora', sans-serif; font-weight: 700; font-size: 0.85rem; border-radius: var(--radius-sm); cursor: pointer; color: var(--text-muted); transition: var(--transition);">
+        👤 Citizen Portal
+      </button>
+      <button type="button" id="tabAdmin" class="login-tab-btn" style="flex: 1; padding: 0.65rem; border: none; background: none; font-family: 'Sora', sans-serif; font-weight: 700; font-size: 0.85rem; border-radius: var(--radius-sm); cursor: pointer; color: var(--text-muted); transition: var(--transition);">
+        🛠️ Authority Sign In
+      </button>
+    </div>
+
+    <!-- Error Alert Container -->
+    <div id="loginError" class="badge-critical" style="margin-bottom: 1.5rem; padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 600; display: none; text-align: center;">
+      Invalid credentials entered.
+    </div>
+
+    <!-- Form 1: Citizen Login -->
+    <form id="citizenForm" style="display: flex; flex-direction: column; gap: 1.25rem; animation: fadeIn 0.3s;">
+      <div class="form-group">
+        <label for="citizenName">Full Name *</label>
+        <input type="text" id="citizenName" placeholder="e.g. Priya Sharma" required autocomplete="name">
+      </div>
+      <div class="form-group">
+        <label for="citizenEmail">Email Address (Optional)</label>
+        <input type="email" id="citizenEmail" placeholder="e.g. priya.sharma@yahoo.com" autocomplete="email">
+        <small style="color: var(--text-muted); font-size: 0.75rem;">Used to pre-fill complaint logs and updates notifications.</small>
+      </div>
+      
+      <button type="submit" class="btn btn-primary" style="padding: 0.95rem; font-size: 1rem; width: 100%; margin-top: 0.5rem;">
+        Enter Civic Platform
+      </button>
+    </form>
+
+    <!-- Form 2: Admin/Authority Login (Initially Hidden) -->
+    <form id="adminForm" style="display: none; flex-direction: column; gap: 1.25rem; animation: fadeIn 0.3s;">
+      <div class="form-group">
+        <label for="adminUsername">Officer Username *</label>
+        <input type="text" id="adminUsername" placeholder="e.g. admin" required autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label for="adminPassword">Security Password *</label>
+        <input type="password" id="adminPassword" placeholder="••••••••" required autocomplete="current-password">
+      </div>
+      
+      <button type="submit" class="btn btn-primary" style="padding: 0.95rem; font-size: 1rem; width: 100%; margin-top: 0.5rem; background: linear-gradient(135deg, var(--primary-dark) 0%, #1E3A8A 100%);">
+        Control Terminal Login
+      </button>
+      
+      <div style="text-align: center; margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted);">
+        Demo Credentials: Username: <code>admin</code> | Password: <code>admin123</code>
+      </div>
+    </form>
+
+  </div>
+
+  <!-- Toast Notification Overlay -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Script links -->
+  <script src="js/login.js"></script>
+</body>
+</html>

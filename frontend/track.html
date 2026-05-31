@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaterWatch – Track Complaint Status</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/3105/3105807.png">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Load Auth Session Checker synchronously -->
+  <script src="js/auth.js"></script>
+</head>
+<body>
+
+  <!-- Dynamic Header Injection based on User Session Role -->
+  <header id="globalHeader"></header>
+
+  <!-- Main Container -->
+  <main>
+    <div class="tracker-box">
+      <h1>Track Your Complaint</h1>
+      <p style="color: var(--text-muted);">Enter your unique WaterWatch Ticket ID to view real-time investigation and repair updates.</p>
+      
+      <!-- Lookup Form -->
+      <form id="trackerSearchForm" class="tracker-search">
+        <input type="text" id="trackInput" placeholder="e.g. WW-00042" required autocomplete="off">
+        <button type="submit" class="btn btn-primary" style="border-radius: var(--radius-sm); font-size: 0.95rem; padding: 0.6rem 1.5rem;">Search</button>
+      </form>
+    </div>
+
+    <!-- Results Section (Initially Hidden) -->
+    <section id="trackResultSection" class="card" style="max-width: 650px; margin: 0 auto; display: none;">
+      
+      <!-- Ticket Details Header -->
+      <div style="border-bottom: 2px solid var(--border); padding-bottom: 1.25rem; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <h2 id="resultTitle" style="font-size: 1.5rem; color: var(--primary-dark)">Issue Title</h2>
+          <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;">
+            <span id="resultId" style="font-family: 'JetBrains Mono', monospace; font-size: 1.25rem; font-weight: 800; color: var(--primary);">WW-00000</span>
+            <span style="color: var(--border);">|</span>
+            <span id="resultTypeBadge" class="badge">Type</span>
+            <span id="resultSeverityBadge" class="badge">Severity</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stepper Progress -->
+      <div class="stepper">
+        
+        <!-- Step 1: Reported -->
+        <div id="step-reported" class="step">
+          <div class="step-indicator"></div>
+          <div class="step-content">
+            <h4 class="step-title">Report Filed</h4>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.15rem;">Complaint successfully logged in the civic database.</p>
+            <div id="date-reported" class="step-date">Date here</div>
+          </div>
+        </div>
+
+        <!-- Step 2: Under Review -->
+        <div id="step-under_review" class="step">
+          <div class="step-indicator"></div>
+          <div class="step-content">
+            <h4 class="step-title">Under Review</h4>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.15rem;">Assigned to the local water engineering team for inspection.</p>
+            <div id="date-under_review" class="step-date">Pending inspection</div>
+          </div>
+        </div>
+
+        <!-- Step 3: In Progress -->
+        <div id="step-in_progress" class="step">
+          <div class="step-indicator"></div>
+          <div class="step-content">
+            <h4 class="step-title">In Progress</h4>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.15rem;">Technician crew dispatched. Active repairs are underway.</p>
+            <div id="date-in_progress" class="step-date">Pending dispatch</div>
+          </div>
+        </div>
+
+        <!-- Step 4: Resolved -->
+        <div id="step-resolved" class="step">
+          <div class="step-indicator"></div>
+          <div class="step-content">
+            <h4 class="step-title">Resolved</h4>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.15rem;">Issue repaired, tested, and marked closed by the authority.</p>
+            <div id="date-resolved" class="step-date">Pending resolution</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Detail Info Cards -->
+      <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 2.5rem; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+        <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
+          <strong style="width: 110px; font-size: 0.9rem; color: var(--primary-dark);">Address:</strong>
+          <span id="resultAddress" style="font-size: 0.9rem; flex: 1;">📍 Physical address details...</span>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
+          <strong style="width: 110px; font-size: 0.9rem; color: var(--primary-dark);">Description:</strong>
+          <span id="resultDesc" style="font-size: 0.9rem; flex: 1; color: var(--text-muted); line-height: 1.5;">Detailed description of the issue...</span>
+        </div>
+
+        <!-- Authority Remark Section (Appears if present) -->
+        <div id="authorityNoteSection" style="margin-top: 1rem; padding: 1.25rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); display: none;">
+          <div style="display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.4rem; color: var(--primary-dark); font-weight: 700; font-size: 0.95rem;">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="vertical-align: middle;">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            Authority Response Note:
+          </div>
+          <p id="resultAuthorityNote" style="font-size: 0.9rem; color: var(--text); line-height: 1.5;">Response note remarks from municipal engineers...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Error / Search Fallback Card -->
+    <section id="trackErrorSection" class="card" style="max-width: 550px; margin: 0 auto; text-align: center; display: none; border-color: rgba(230,57,70,0.15); background: var(--danger-bg);">
+      <h3 style="color: var(--danger); font-size: 1.25rem; margin-bottom: 0.5rem;">Ticket Not Found</h3>
+      <p id="errorMessage" style="font-size: 0.9rem; color: var(--text-muted);">Please double check your Ticket ID. Ensure it matches the format WW-XXXXX.</p>
+    </section>
+  </main>
+
+  <!-- Toast Notification Overlay -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-content">
+      <div class="footer-logo">
+        <svg viewBox="0 0 24 24">
+          <path d="M12,2C12,2 6,8.8 6,13C6,16.3 8.7,19 12,19C15.3,19 18,16.3 18,13C18,8.8 12,2 12,2ZM12,17C9.8,17 8,15.2 8,13C8,11.2 9.5,8.8 12,5.6C14.5,8.8 16,11.2 16,13C16,15.2 14.2,17 12,17Z"/>
+        </svg>
+        WaterWatch
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="map.html">Interactive Map</a>
+        <a href="track.html">Track Complaint</a>
+        <a href="dashboard.html">Dashboard</a>
+      </div>
+      <div style="font-size: 0.85rem; opacity: 0.7; width: 100%; text-align: center; margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">
+        &copy; 2026 WaterWatch CivicTech. Bridging communities for a sustainable water future.
+      </div>
+    </div>
+  </footer>
+
+  <!-- Tracker Logic Script -->
+  <script src="js/track.js"></script>
+</body>
+</html>

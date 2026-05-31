@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaterWatch – Report & Track Water Issues</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/3105/3105807.png">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Load Auth Session Checker synchronously -->
+  <script src="js/auth.js"></script>
+  <!-- Leaflet CSS for Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+</head>
+<body>
+
+  <!-- Dynamic Header Injection based on User Session Role -->
+  <header id="globalHeader"></header>
+
+  <!-- Main Container -->
+  <main>
+    <!-- Hero Section -->
+    <section class="hero">
+      <h1>Empower Your Community,<br>Report Water Issues Instantly</h1>
+      <p>WaterWatch is a civic platform connecting citizens with municipal authorities to resolve leakages, supply shortages, contamination, and low pressure. Let's make every drop count.</p>
+      <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
+        <a href="#report-section" class="btn btn-primary">
+          <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" style="margin-right: 0.25rem;">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+          </svg>
+          Report an Issue Now
+        </a>
+        <a href="map.html" class="btn btn-secondary">Explore Local Map</a>
+      </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="how-it-works">
+      <div class="card step-card">
+        <div class="step-num">1</div>
+        <h3>Report Issue</h3>
+        <p>Pin the exact location on the map, select the issue type, add a brief description, and submit.</p>
+      </div>
+      <div class="card step-card">
+        <div class="step-num">2</div>
+        <h3>Track Progress</h3>
+        <p>Get a unique Ticket ID to track the investigation and maintenance progress in real time.</p>
+      </div>
+      <div class="card step-card">
+        <div class="step-num">3</div>
+        <h3>Resolved</h3>
+        <p>Municipal technicians repair the line, supply notes, and close the issue, restoring service.</p>
+      </div>
+    </section>
+
+    <!-- Complaint Form Section -->
+    <section id="report-section" class="form-section">
+      <div class="card">
+        <div style="border-bottom: 2px solid var(--border); padding-bottom: 1rem; margin-bottom: 1.5rem;">
+          <h2 style="font-size: 1.75rem;">File a Water Complaint</h2>
+          <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">Please provide details regarding the water issue. Fields marked with * are required.</p>
+        </div>
+
+        <form id="complaintForm" novalidate>
+          <div class="form-grid">
+            
+            <!-- Issue Type -->
+            <div class="form-group">
+              <label for="issueType">Issue Category *</label>
+              <select id="issueType" required>
+                <option value="" disabled selected>-- Select Category --</option>
+                <option value="leakage">Leakage / Pipeline Burst</option>
+                <option value="contamination">Contamination / Turbid Water</option>
+                <option value="shortage">Water Supply Shortage</option>
+                <option value="pressure">Low Supply Pressure</option>
+                <option value="other">Other Water Issue</option>
+              </select>
+            </div>
+
+            <!-- Severity Levels -->
+            <div class="form-group">
+              <label>Severity Level *</label>
+              <div class="severity-selector">
+                <div class="severity-option">
+                  <input type="radio" id="sevLow" name="severity" value="low" required>
+                  <label class="severity-label" for="sevLow" data-severity="low">Low</label>
+                </div>
+                <div class="severity-option">
+                  <input type="radio" id="sevMed" name="severity" value="medium">
+                  <label class="severity-label" for="sevMed" data-severity="medium">Medium</label>
+                </div>
+                <div class="severity-option">
+                  <input type="radio" id="sevHigh" name="severity" value="high">
+                  <label class="severity-label" for="sevHigh" data-severity="high">High</label>
+                </div>
+                <div class="severity-option">
+                  <input type="radio" id="sevCrit" name="severity" value="critical">
+                  <label class="severity-label" for="sevCrit" data-severity="critical">Critical</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Title -->
+            <div class="form-group full-width">
+              <label for="title">Complaint Summary *</label>
+              <input type="text" id="title" placeholder="e.g., Major pipeline leakage flooding HSR 3rd sector street corner" max-length="100" required>
+              <small style="color: var(--text-muted); font-size: 0.75rem; text-align: right;">Max 100 characters</small>
+            </div>
+
+            <!-- Description -->
+            <div class="form-group full-width">
+              <label for="description">Detailed Description *</label>
+              <textarea id="description" rows="4" placeholder="Explain the problem in detail. (e.g., how long has it been happening, size of water puddle, color of water, etc.)" min-length="30" required></textarea>
+              <small style="color: var(--text-muted); font-size: 0.75rem;">Minimum 30 characters</small>
+            </div>
+
+            <!-- Location Picker -->
+            <div class="form-group full-width">
+              <label style="display: flex; justify-content: space-between; align-items: center;">
+                <span>Pin Location on Map *</span>
+                <button type="button" id="geoBtn" class="btn btn-secondary btn-icon" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" title="Auto-detect location">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 0.25rem;">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                  </svg>
+                  Detect My Location
+                </button>
+              </label>
+              
+              <div class="location-box">
+                <input type="text" id="latitude" placeholder="Latitude" readonly required style="background: #F8FAFC; cursor: not-allowed; width: 48%;">
+                <input type="text" id="longitude" placeholder="Longitude" readonly required style="background: #F8FAFC; cursor: not-allowed; width: 48%;">
+              </div>
+              
+              <div id="minimap" class="minimap-container"></div>
+              <small style="color: var(--text-muted); font-size: 0.8rem;">Drag the map marker pin to the exact location of the issue.</small>
+            </div>
+
+            <!-- Address -->
+            <div class="form-group full-width">
+              <label for="address">Human-Readable Address *</label>
+              <input type="text" id="address" placeholder="e.g., Street No. 4, Opposite Public Library, Bangalore" required>
+            </div>
+
+            <!-- Reporter Name (Optional) -->
+            <div class="form-group">
+              <label for="reporterName">Your Name (Optional)</label>
+              <input type="text" id="reporterName" placeholder="e.g., Aravind Kumar">
+            </div>
+
+            <!-- Reporter Email (Optional) -->
+            <div class="form-group">
+              <label for="reporterEmail">Email Address (Optional)</label>
+              <input type="email" id="reporterEmail" placeholder="e.g., aravind.k@gmail.com">
+              <small style="color: var(--text-muted); font-size: 0.75rem;">Used to receive real-time updates when status changes</small>
+            </div>
+
+          </div>
+
+          <!-- Submit Button -->
+          <div style="margin-top: 2rem; display: flex; justify-content: flex-end;">
+            <button type="submit" id="submitBtn" class="btn btn-primary" style="padding: 1rem 2.5rem; font-size: 1.1rem; width: 100%;">
+              <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 0.25rem;">
+                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path>
+              </svg>
+              Submit Complaint
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal: Success / Ticket Confirmation -->
+  <div id="successModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header" style="background: var(--success-bg); border-bottom-color: rgba(45,158,95,0.15)">
+        <h3 style="color: var(--success); display: flex; align-items: center; gap: 0.5rem;">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          Report Filed Successfully!
+        </h3>
+        <button class="modal-close" id="closeSuccessBtn">&times;</button>
+      </div>
+      <div class="modal-body" style="text-align: center; padding: 2.5rem 2rem;">
+        <p style="color: var(--text-muted);">Thank you for helping your community. Your report has been successfully logged.</p>
+        
+        <div style="background: var(--bg); border: 1px dashed var(--border); padding: 1.5rem; border-radius: var(--radius-md); margin: 1.5rem 0;">
+          <small style="text-transform: uppercase; font-weight: 700; color: var(--primary-dark); letter-spacing: 0.05em;">Your Ticket ID</small>
+          <div id="ticketIdDisplay" style="font-family: 'JetBrains Mono', monospace; font-size: 2.25rem; font-weight: 800; color: var(--primary); margin-top: 0.25rem;">WW-XXXXX</div>
+        </div>
+
+        <p style="font-size: 0.9rem; color: var(--text-muted);">Save this Ticket ID to track the issue status or share it with neighbors.</p>
+      </div>
+      <div class="modal-footer" style="background: #FAFAFA;">
+        <a id="trackTicketLink" href="track.html" class="btn btn-primary" style="width: 100%;">Track Issue Status</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Duplicate Warning -->
+  <div id="duplicateModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 550px;">
+      <div class="modal-header" style="background: var(--warning-bg); border-bottom-color: rgba(244,162,97,0.15)">
+        <h3 style="color: var(--warning); display: flex; align-items: center; gap: 0.5rem;">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          Similar Issue Nearby Found!
+        </h3>
+        <button class="modal-close" id="closeDuplicateBtn">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem;">
+        <p style="color: var(--text); font-weight: 600;">A similar active issue of type <span id="dupType" class="badge">Category</span> was recently reported within 500m of your location:</p>
+        
+        <div class="card" style="padding: 1.25rem; margin: 1rem 0; border-left: 4px solid var(--warning); background: #FAFDFB;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+            <strong id="dupTitle" style="font-size: 1rem; color: var(--primary-dark);">Major Leakage</strong>
+            <span id="dupId" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--primary);">WW-00000</span>
+          </div>
+          <p id="dupDesc" style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 0.75rem;">Description here...</p>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <span id="dupStatus" class="badge">Status</span>
+            <span id="dupSeverity" class="badge">Severity</span>
+          </div>
+        </div>
+
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Would you like to track this existing ticket, or submit your report anyway if it is a different issue?</p>
+      </div>
+      <div class="modal-footer" style="background: #FAFAFA; gap: 0.75rem; flex-direction: column;">
+        <div style="display: flex; gap: 0.75rem; width: 100%;">
+          <a id="dupTrackLink" href="#" class="btn btn-secondary" style="flex: 1;">Track Existing Issue</a>
+          <button id="forceSubmitBtn" class="btn btn-primary" style="flex: 1;">Submit Anyway</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-content">
+      <div class="footer-logo">
+        <svg viewBox="0 0 24 24">
+          <path d="M12,2C12,2 6,8.8 6,13C6,16.3 8.7,19 12,19C15.3,19 18,16.3 18,13C18,8.8 12,2 12,2ZM12,17C9.8,17 8,15.2 8,13C8,11.2 9.5,8.8 12,5.6C14.5,8.8 16,11.2 16,13C16,15.2 14.2,17 12,17Z"/>
+        </svg>
+        WaterWatch
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="map.html">Interactive Map</a>
+        <a href="track.html">Track Complaint</a>
+        <a href="dashboard.html">Dashboard</a>
+      </div>
+      <div style="font-size: 0.85rem; opacity: 0.7; width: 100%; text-align: center; margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">
+        &copy; 2026 WaterWatch CivicTech. Bridging communities for a sustainable water future.
+      </div>
+    </div>
+  </footer>
+
+  <!-- Leaflet JS for Map -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Form Logic script -->
+  <script src="js/submit.js"></script>
+</body>
+</html>

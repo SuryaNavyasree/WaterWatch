@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaterWatch – Water Authority Dashboard</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/3105/3105807.png">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Load Auth Session Checker synchronously -->
+  <script src="js/auth.js"></script>
+  <!-- Leaflet CSS for Mini-Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+</head>
+<body>
+
+  <!-- Dynamic Header Injection based on User Session Role -->
+  <header id="globalHeader"></header>
+
+  <!-- Main Container -->
+  <main style="max-width: 1400px;">
+    
+    <!-- Title Section -->
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 2rem; gap: 1rem;">
+      <div>
+        <h1 style="font-size: 2rem; color: var(--primary-dark)">Municipal Water Control Terminal</h1>
+        <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">Real-time management dashboard for monitoring, assigning, and resolving citizen complaints.</p>
+      </div>
+      <!-- CSV Export Trigger -->
+      <button id="exportCsvBtn" class="btn btn-secondary">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right: 0.25rem; vertical-align: middle;">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="16" y1="13" x2="8" y2="13"></line>
+          <line x1="16" y1="17" x2="8" y2="17"></line>
+          <polyline points="10 9 9 9 8 9"></polyline>
+        </svg>
+        Export CSV Data
+      </button>
+    </div>
+
+    <!-- Stats Cards Row -->
+    <section class="dashboard-grid">
+      <!-- Total -->
+      <div class="card stat-card stat-total">
+        <div class="stat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+        </div>
+        <div class="stat-info">
+          <span id="stat-total-val" class="stat-num">0</span>
+          <span class="stat-label">Total Reports</span>
+        </div>
+      </div>
+      <!-- Open (Reported + Under Review) -->
+      <div class="card stat-card stat-open">
+        <div class="stat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        </div>
+        <div class="stat-info">
+          <span id="stat-open-val" class="stat-num">0</span>
+          <span class="stat-label">Pending Review</span>
+        </div>
+      </div>
+      <!-- In Progress -->
+      <div class="card stat-card stat-progress">
+        <div class="stat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+        </div>
+        <div class="stat-info">
+          <span id="stat-progress-val" class="stat-num">0</span>
+          <span class="stat-label">In Progress</span>
+        </div>
+      </div>
+      <!-- Resolved this week -->
+      <div class="card stat-card stat-resolved">
+        <div class="stat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        </div>
+        <div class="stat-info">
+          <span id="stat-resolved-val" class="stat-num">0</span>
+          <span class="stat-label">Resolved (Week)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Charts Row -->
+    <section class="charts-grid">
+      <!-- Historical Timeline Line Chart -->
+      <div class="card chart-card">
+        <h3>Reports Timeline (Last 30 Days)</h3>
+        <div class="chart-container">
+          <canvas id="timelineChart"></canvas>
+        </div>
+      </div>
+      <!-- Issue Types Bar Chart -->
+      <div class="card chart-card">
+        <h3>Complaints by Category</h3>
+        <div class="chart-container">
+          <canvas id="typesChart"></canvas>
+        </div>
+      </div>
+      <!-- Status Distribution Doughnut -->
+      <div class="card chart-card">
+        <h3>Status Breakdown</h3>
+        <div class="chart-container">
+          <canvas id="statusChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Operational Mini Map + Table Layout -->
+    <section style="display: grid; grid-template-columns: 1fr; gap: 2rem; margin-bottom: 3rem; align-items: start;">
+      
+      <!-- Mini Map Container -->
+      <div class="card" style="padding: 1.5rem;">
+        <h3 style="font-size: 1.1rem; margin-bottom: 1rem;">Geographic Distribution (Active Issues)</h3>
+        <div id="dashMinimap" style="height: 300px; border-radius: var(--radius-md); border: 1px solid var(--border); overflow: hidden; z-index:1;"></div>
+      </div>
+
+      <!-- Table Card -->
+      <div class="card table-card">
+        <!-- Table Top Controls -->
+        <div style="padding: 1.5rem 1.5rem 0.5rem 1.5rem;">
+          <div class="table-controls">
+            <h3 style="font-size: 1.25rem;">Complaints Pipeline</h3>
+            <div class="search-filter-box">
+              <input type="text" id="tableSearch" placeholder="Search by ID, summary, or address...">
+              <select id="tableStatusFilter" style="padding: 0.65rem 1rem; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 0.9rem; outline: none; background: white;">
+                <option value="">-- All Statuses --</option>
+                <option value="reported">Reported</option>
+                <option value="under_review">Under Review</option>
+                <option value="in_progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- The Table -->
+        <div class="table-wrapper">
+          <table class="complaints-table" id="complaintsTable">
+            <thead>
+              <tr>
+                <th data-sort="id">ID ⇅</th>
+                <th data-sort="title">Complaint Summary ⇅</th>
+                <th data-sort="issue_type">Category ⇅</th>
+                <th data-sort="severity">Severity ⇅</th>
+                <th data-sort="address">Location ⇅</th>
+                <th data-sort="created_at">Date Filed ⇅</th>
+                <th data-sort="status">Status ⇅</th>
+                <th style="cursor: default;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody">
+              <!-- Dynamically populated rows -->
+              <tr>
+                <td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-muted);">Fetching pipeline database...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Modal: Status Update Dialog -->
+  <div id="statusModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Update Complaint Status</h3>
+        <button class="modal-close" id="closeStatusModalBtn">&times;</button>
+      </div>
+      <form id="statusUpdateForm">
+        <div class="modal-body">
+          <p style="font-size: 0.9rem; color: var(--text-muted);">Modify the status and attach an operational response remark for <strong id="modalTicketId" style="color: var(--primary);">WW-XXXXX</strong>.</p>
+          
+          <input type="hidden" id="modalIntId">
+          
+          <!-- Select Status -->
+          <div class="form-group">
+            <label for="modalStatusSelect">Work Status *</label>
+            <select id="modalStatusSelect" required style="width: 100%;">
+              <option value="reported">Reported</option>
+              <option value="under_review">Under Review</option>
+              <option value="in_progress">In Progress</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </div>
+
+          <!-- Authority Note -->
+          <div class="form-group">
+            <label for="modalNoteText">Operational Remark Note</label>
+            <textarea id="modalNoteText" rows="4" placeholder="Enter remarks regarding dispatch, assessment, or completion details for citizens to view..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="cancelStatusModalBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Overlay -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-content">
+      <div class="footer-logo">
+        <svg viewBox="0 0 24 24">
+          <path d="M12,2C12,2 6,8.8 6,13C6,16.3 8.7,19 12,19C15.3,19 18,16.3 18,13C18,8.8 12,2 12,2ZM12,17C9.8,17 8,15.2 8,13C8,11.2 9.5,8.8 12,5.6C14.5,8.8 16,11.2 16,13C16,15.2 14.2,17 12,17Z"/>
+        </svg>
+        WaterWatch
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="map.html">Interactive Map</a>
+        <a href="track.html">Track Complaint</a>
+        <a href="dashboard.html">Dashboard</a>
+      </div>
+      <div style="font-size: 0.85rem; opacity: 0.7; width: 100%; text-align: center; margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">
+        &copy; 2026 WaterWatch CivicTech. Bridging communities for a sustainable water future.
+      </div>
+    </div>
+  </footer>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Dashboard Logic script -->
+  <script src="js/dashboard.js"></script>
+</body>
+</html>
