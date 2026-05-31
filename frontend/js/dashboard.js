@@ -1,7 +1,7 @@
 // WaterWatch API Base URL Configuration
-const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port !== '5000'
-  ? 'http://localhost:5000/api'
-  : window.location.origin + '/api';
+const API_BASE_URL = window.location.origin.startsWith('file://') || window.location.hostname === ''
+  ? 'http://localhost:10000/api'
+  : (window.location.port === '3000' ? 'http://localhost:10000/api' : window.location.origin + '/api');
 
 let dashMap;
 let mapMarkers = [];

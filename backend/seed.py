@@ -2,10 +2,12 @@ import os
 import random
 from datetime import datetime, timedelta
 def seed_database(db, Complaint):
-    print("Creating database tables...")
-    db.create_all()
+    session = getattr(db, 'session', db)
+    if hasattr(db, 'create_all'):
+        print("Creating database tables...")
+        db.create_all()
     print("Clearing existing complaints...")
-    db.session.query(Complaint).delete()
+    session.query(Complaint).delete()
 
     # Bangalore-centered coordinates (approx 12.91 to 12.99 Lat, 77.55 to 77.68 Lng)
     bangalore_locations = [
@@ -169,12 +171,20 @@ def seed_database(db, Complaint):
             created_at=created_time,
             updated_at=updated_time
         )
-        db.session.add(complaint)
+        session.add(complaint)
 
-    db.session.commit()
+    session.commit()
     print("Database successfully seeded with 18 realistic complaints!")
 
 if __name__ == '__main__':
     from app import app, db, Complaint
-    with app.app_context():
-        seed_database(db, Complaint)
+    if hasattr(app, 'app_context'):
+        with app.app_context():
+            seed_database(db, Complaint)
+    else:
+        from app import SessionLocal
+        db_sess = SessionLocal()
+        try:
+            seed_database(db_sess, Complaint)
+        finally:
+            db_sess.close()

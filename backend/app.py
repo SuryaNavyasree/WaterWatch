@@ -1,48 +1,54 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
+from fastapi import FastAPI, Depends, HTTPException, Query, Response, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.encoders import jsonable_encoder
+from pydantic import BaseModel, EmailStr, Field
+from typing import List, Optional
 from datetime import datetime, timedelta
+from contextlib import asynccontextmanager
 import math
 import os
 
-app = Flask(__name__, static_folder='../frontend', static_url_path='')
-# Enable CORS for all routes, supporting local frontend and remote hosts
-CORS(app)
+# --- SQLAlchemy Engine & Session Configuration ---
+from sqlalchemy import create_engine, Column, Integer, String, Text, Float, DateTime
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
 
 # SQLite & PostgreSQL production URI configuration
 basedir = os.path.abspath(os.path.dirname(__file__))
 database_url = os.environ.get('DATABASE_URL')
 if database_url:
-    # Render and Heroku sometimes pass 'postgres://' which SQLAlchemy 1.4+ requires as 'postgresql://'
     if database_url.startswith('postgres://'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
-    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    SQLALCHEMY_DATABASE_URL = database_url
 else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'waterwatch.db')
+    SQLALCHEMY_DATABASE_URL = 'sqlite:///' + os.path.join(basedir, 'waterwatch.db')
 
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# SQLite check_same_thread compatibility mapping
+engine_args = {"check_same_thread": False} if "sqlite" in SQLALCHEMY_DATABASE_URL else {}
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=engine_args)
 
-db = SQLAlchemy(app)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
 # --- Model ---
-class Complaint(db.Model):
+class Complaint(Base):
     __tablename__ = 'complaints'
     
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    title = db.Column(db.String(100), nullable=False)
-    description = db.Column(db.Text, nullable=False)
-    issue_type = db.Column(db.String(30), nullable=False) # leakage, shortage, contamination, pressure, other
-    severity = db.Column(db.String(20), nullable=False)   # low, medium, high, critical
-    status = db.Column(db.String(30), default='reported')  # reported, under_review, in_progress, resolved
-    latitude = db.Column(db.Float, nullable=False)
-    longitude = db.Column(db.Float, nullable=False)
-    address = db.Column(db.String(255), nullable=False)
-    reporter_name = db.Column(db.String(100), nullable=True)
-    reporter_email = db.Column(db.String(100), nullable=True)
-    photo_url = db.Column(db.String(255), nullable=True)
-    authority_note = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    title = Column(String(100), nullable=False)
+    description = Column(Text, nullable=False)
+    issue_type = Column(String(30), nullable=False) # leakage, shortage, contamination, pressure, other
+    severity = Column(String(20), nullable=False)   # low, medium, high, critical
+    status = Column(String(30), default='reported')  # reported, under_review, in_progress, resolved
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    address = Column(String(255), nullable=False)
+    reporter_name = Column(String(100), nullable=True)
+    reporter_email = Column(String(100), nullable=True)
+    photo_url = Column(String(255), nullable=True)
+    authority_note = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
         return {
@@ -64,24 +70,91 @@ class Complaint(db.Model):
             'updated_at': self.updated_at.isoformat(),
         }
 
-# Ensure database tables exist and are auto-seeded if empty on startup
-with app.app_context():
-    db.create_all()
+# --- Pydantic Validation Schemas (For Strict Type Check & OpenAPI Auto-Docs) ---
+class ComplaintCreate(BaseModel):
+    title: str = Field(..., max_length=100, examples=["Major pipeline leakage flooding Koramangala"])
+    description: str = Field(..., min_length=30, examples=["Explain the problem in detail. Must be at least 30 characters."])
+    issue_type: str = Field(..., examples=["leakage"]) # leakage, shortage, contamination, pressure, other
+    severity: str = Field(..., examples=["high"])     # low, medium, high, critical
+    latitude: float = Field(..., examples=[12.9716])
+    longitude: float = Field(..., examples=[77.5946])
+    address: str = Field(..., examples=["Block 4, Koramangala, Bengaluru"])
+    reporter_name: Optional[str] = Field(None, examples=["Aravind Kumar"])
+    reporter_email: Optional[str] = Field(None, examples=["aravind.k@gmail.com"])
+    photo_url: Optional[str] = Field(None, examples=["/assets/demo_images/issue_leakage.jpg"])
+    bypass_duplicate: Optional[bool] = Field(False, description="Forces submission bypassing duplicate warning overlays")
+
+class ComplaintStatusUpdate(BaseModel):
+    status: str = Field(..., examples=["in_progress"]) # reported, under_review, in_progress, resolved
+    authority_note: Optional[str] = Field(None, examples=["Technician crew dispatched to site."])
+
+class ComplaintResponse(BaseModel):
+    id: int
+    display_id: str
+    title: str
+    description: str
+    issue_type: str
+    severity: str
+    status: str
+    latitude: float
+    longitude: float
+    address: str
+    reporter_name: str
+    reporter_email: str
+    photo_url: str
+    authority_note: str
+    created_at: str
+    updated_at: str
+
+    class Config:
+        from_attributes = True
+
+# --- Lifespan Context Manager (Startup auto-creations and auto-seeding) ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup Events
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
     try:
-        if Complaint.query.count() == 0:
-            from seed import seed_database
-            seed_database(db, Complaint)
-    except Exception as e:
-        print(f"Database auto-initialization/seeding warning: {e}", flush=True)
+        if db.query(Complaint).count() == 0:
+            try:
+                from seed import seed_database
+                seed_database(db, Complaint)
+            except Exception as e:
+                print(f"Database auto-seeding warning: {e}")
+    finally:
+        db.close()
+    yield
+    # Shutdown Events (None)
+
+# Initialize FastAPI with metadata for beautiful OpenAPI displays
+app = FastAPI(
+    title="WaterWatch Civic API",
+    description="Interactive REST endpoints for municipal water utility complaints, proximity checks, and control dash dashboards.",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Enable CORS for all origins, supporting local frontend and remote hosts
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Database Session local dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 # --- Distance Utility ---
 def haversine_distance(lat1, lon1, lat2, lon2):
-    """
-    Calculate the great circle distance between two points 
-    on the earth (specified in decimal degrees) in kilometers.
-    """
     R = 6371.0  # Radius of the earth in km
-    
     lat1_rad = math.radians(lat1)
     lon1_rad = math.radians(lon1)
     lat2_rad = math.radians(lat2)
@@ -93,97 +166,74 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     a = math.sin(dlat / 2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2)**2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     
-    distance = R * c
-    return distance  # in km
+    return R * c  # in km
 
-# --- Routes ---
+# --- API REST Routes ---
 
-@app.route('/')
-def index():
-    return app.send_static_file('index.html')
+@app.post("/api/complaints", response_model=ComplaintResponse, status_code=status.HTTP_201_CREATED, tags=["Complaints"])
+def submit_complaint(data: ComplaintCreate, response: Response, db: Session = Depends(get_db)):
+    issue_type = data.issue_type.strip().lower()
+    severity = data.severity.strip().lower()
 
-@app.route('/api/complaints', methods=['POST'])
-def submit_complaint():
-    data = request.get_json() or {}
-    
-    # Client-side style validation fallback
-    title = data.get('title', '').strip()
-    description = data.get('description', '').strip()
-    issue_type = data.get('issue_type', '').strip().lower()
-    severity = data.get('severity', '').strip().lower()
-    latitude = data.get('latitude')
-    longitude = data.get('longitude')
-    address = data.get('address', '').strip()
-    reporter_name = (data.get('reporter_name') or '').strip()
-    reporter_email = (data.get('reporter_email') or '').strip()
-    photo_url = (data.get('photo_url') or '').strip()
-    bypass_duplicate = data.get('bypass_duplicate', False)
-
-    if not title or len(title) > 100:
-        return jsonify({'error': 'Title is required and must be less than 100 characters.'}), 400
-    if not description or len(description) < 30:
-        return jsonify({'error': 'Description is required and must be at least 30 characters.'}), 400
     if issue_type not in ['leakage', 'shortage', 'contamination', 'pressure', 'other']:
-        return jsonify({'error': 'Invalid issue type.'}), 400
+        raise HTTPException(status_code=400, detail="Invalid issue category type.")
     if severity not in ['low', 'medium', 'high', 'critical']:
-        return jsonify({'error': 'Invalid severity level.'}), 400
-    try:
-        lat = float(latitude)
-        lng = float(longitude)
-    except (TypeError, ValueError):
-        return jsonify({'error': 'Valid Latitude and Longitude are required.'}), 400
-    if not address:
-        return jsonify({'error': 'Address is required.'}), 400
+        raise HTTPException(status_code=400, detail="Invalid severity level.")
 
     # Proximity Check (Duplicate Alert within 500m / 0.5km for active tickets reported within the last 48 hours)
-    if not bypass_duplicate:
+    if not data.bypass_duplicate:
         cutoff_time = datetime.utcnow() - timedelta(hours=48)
-        active_nearby = Complaint.query.filter(
+        active_nearby = db.query(Complaint).filter(
             Complaint.issue_type == issue_type,
             Complaint.status != 'resolved',
             Complaint.created_at >= cutoff_time
         ).all()
         
         for comp in active_nearby:
-            dist = haversine_distance(lat, lng, comp.latitude, comp.longitude)
+            dist = haversine_distance(data.latitude, data.longitude, comp.latitude, comp.longitude)
             if dist < 0.5:  # 500 meters
-                return jsonify({
-                    'duplicate_found': True,
-                    'message': 'A similar active issue was recently reported within 500 meters of your location.',
-                    'complaint': comp.to_dict()
-                }), 409
+                # We return duplicate alerts as a 409 conflict, embedding JSON details of duplicate ticket
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "duplicate_found": True,
+                        "message": "A similar active issue was recently reported within 500 meters of your location.",
+                        "complaint": comp.to_dict()
+                    }
+                )
 
     # Save to database
     complaint = Complaint(
-        title=title,
-        description=description,
+        title=data.title.strip(),
+        description=data.description.strip(),
         issue_type=issue_type,
         severity=severity,
-        latitude=lat,
-        longitude=lng,
-        address=address,
-        reporter_name=reporter_name or None,
-        reporter_email=reporter_email or None,
-        photo_url=photo_url or None
+        latitude=data.latitude,
+        longitude=data.longitude,
+        address=data.address.strip(),
+        reporter_name=data.reporter_name.strip() if data.reporter_name else None,
+        reporter_email=data.reporter_email.strip() if data.reporter_email else None,
+        photo_url=data.photo_url.strip() if data.photo_url else None
     )
     
-    db.session.add(complaint)
-    db.session.commit()
+    db.add(complaint)
+    db.commit()
+    db.refresh(complaint)
     
-    return jsonify(complaint.to_dict()), 201
+    return complaint.to_dict()
 
-@app.route('/api/complaints', methods=['GET'])
-def list_complaints():
-    # Filter query parameters
-    status = request.args.get('status')
-    issue_type = request.args.get('issue_type')
-    severity = request.args.get('severity')
-    search = request.args.get('search')
-    
-    limit = request.args.get('limit', 50, type=int)
-    offset = request.args.get('offset', 0, type=int)
-
-    query = Complaint.query
+@app.get("/api/complaints", response_model=List[ComplaintResponse], tags=["Complaints"])
+def list_complaints(
+    response: Response,
+    status: Optional[str] = None,
+    issue_type: Optional[str] = None,
+    severity: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = Query(50, ge=1),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Complaint)
 
     if status:
         query = query.filter(Complaint.status == status.lower())
@@ -204,38 +254,36 @@ def list_complaints():
     total = query.count()
     complaints = query.offset(offset).limit(limit).all()
     
-    response = jsonify([c.to_dict() for c in complaints])
     response.headers['X-Total-Count'] = str(total)
-    return response, 200
+    # Expose custom header to client origins
+    response.headers['Access-Control-Expose-Headers'] = 'X-Total-Count'
+    
+    return [c.to_dict() for c in complaints]
 
-@app.route('/api/complaints/<int:id>', methods=['GET'])
-def get_complaint(id):
-    complaint = Complaint.query.get(id)
+@app.get("/api/complaints/{id}", response_model=ComplaintResponse, tags=["Complaints"])
+def get_complaint(id: int, db: Session = Depends(get_db)):
+    complaint = db.query(Complaint).filter(Complaint.id == id).first()
     if not complaint:
-        return jsonify({'error': f'Complaint with ID WW-{id:05d} not found.'}), 404
-    return jsonify(complaint.to_dict()), 200
+        raise HTTPException(status_code=404, detail=f"Complaint with ID WW-{id:05d} not found.")
+    return complaint.to_dict()
 
-@app.route('/api/complaints/<int:id>/status', methods=['PATCH'])
-def update_status(id):
-    complaint = Complaint.query.get(id)
+@app.patch("/api/complaints/{id}/status", response_model=ComplaintResponse, tags=["Complaints"])
+def update_status(id: int, data: ComplaintStatusUpdate, db: Session = Depends(get_db)):
+    complaint = db.query(Complaint).filter(Complaint.id == id).first()
     if not complaint:
-        return jsonify({'error': f'Complaint with ID WW-{id:05d} not found.'}), 404
+        raise HTTPException(status_code=404, detail=f"Complaint with ID WW-{id:05d} not found.")
         
-    data = request.get_json() or {}
-    new_status = data.get('status', '').strip().lower()
-    authority_note = data.get('authority_note', '').strip()
-
-    if not new_status:
-        return jsonify({'error': 'Status is required.'}), 400
+    new_status = data.status.strip().lower()
     if new_status not in ['reported', 'under_review', 'in_progress', 'resolved']:
-        return jsonify({'error': 'Invalid status update.'}), 400
+        raise HTTPException(status_code=400, detail="Invalid status update value.")
 
     complaint.status = new_status
-    if authority_note:
-        complaint.authority_note = authority_note
+    if data.authority_note:
+        complaint.authority_note = data.authority_note.strip()
         
     complaint.updated_at = datetime.utcnow()
-    db.session.commit()
+    db.commit()
+    db.refresh(complaint)
 
     # Mock Email Dispatch System
     email_dispatched = False
@@ -249,27 +297,26 @@ def update_status(id):
         print("-"*80)
         print(f" Hello {complaint.reporter_name or 'Citizen'},")
         print(f" The status of your report \"{complaint.title}\" has been updated to: {new_status.replace('_', ' ').upper()}.")
-        if authority_note:
-            print(f" Authority Remark: \"{authority_note}\"")
-        print(f" Track live: http://localhost:3000/track.html?id=WW-{complaint.id:05d}")
+        if complaint.authority_note:
+            print(f" Authority Remark: \"{complaint.authority_note}\"")
+        print(f" Track live: http://localhost:10000/track.html?id=WW-{complaint.id:05d}")
         print("="*80 + "\n")
 
     res = complaint.to_dict()
     res['mock_email_sent'] = email_dispatched
-    return jsonify(res), 200
+    return res
 
-@app.route('/api/stats', methods=['GET'])
-def get_stats():
-    # Counts
-    total = Complaint.query.count()
-    reported = Complaint.query.filter(Complaint.status == 'reported').count()
-    under_review = Complaint.query.filter(Complaint.status == 'under_review').count()
-    in_progress = Complaint.query.filter(Complaint.status == 'in_progress').count()
-    resolved = Complaint.query.filter(Complaint.status == 'resolved').count()
+@app.get("/api/stats", tags=["Analytics"])
+def get_stats(db: Session = Depends(get_db)):
+    total = db.query(Complaint).count()
+    reported = db.query(Complaint).filter(Complaint.status == 'reported').count()
+    under_review = db.query(Complaint).filter(Complaint.status == 'under_review').count()
+    in_progress = db.query(Complaint).filter(Complaint.status == 'in_progress').count()
+    resolved = db.query(Complaint).filter(Complaint.status == 'resolved').count()
     
     # Resolved this week
     one_week_ago = datetime.utcnow() - timedelta(days=7)
-    resolved_this_week = Complaint.query.filter(
+    resolved_this_week = db.query(Complaint).filter(
         Complaint.status == 'resolved',
         Complaint.updated_at >= one_week_ago
     ).count()
@@ -278,13 +325,13 @@ def get_stats():
     types = ['leakage', 'shortage', 'contamination', 'pressure', 'other']
     type_counts = {}
     for t in types:
-        type_counts[t] = Complaint.query.filter(Complaint.issue_type == t).count()
+        type_counts[t] = db.query(Complaint).filter(Complaint.issue_type == t).count()
         
     # Group by Severity
     severities = ['low', 'medium', 'high', 'critical']
     severity_counts = {}
     for s in severities:
-        severity_counts[s] = Complaint.query.filter(Complaint.severity == s).count()
+        severity_counts[s] = db.query(Complaint).filter(Complaint.severity == s).count()
 
     # Timeline (Last 30 Days)
     history = []
@@ -294,7 +341,7 @@ def get_stats():
         day_start = datetime.combine(day, datetime.min.time())
         day_end = datetime.combine(day, datetime.max.time())
         
-        count = Complaint.query.filter(
+        count = db.query(Complaint).filter(
             Complaint.created_at >= day_start,
             Complaint.created_at <= day_end
         ).count()
@@ -304,7 +351,7 @@ def get_stats():
             'count': count
         })
 
-    return jsonify({
+    return {
         'total_reports': total,
         'status_counts': {
             'reported': reported,
@@ -316,25 +363,17 @@ def get_stats():
         'type_counts': type_counts,
         'severity_counts': severity_counts,
         'history': history
-    }), 200
+    }
 
-@app.route('/api/complaints/nearby', methods=['GET'])
-def get_nearby_complaints():
-    lat_param = request.args.get('latitude')
-    lng_param = request.args.get('longitude')
-    radius_param = request.args.get('radius_km', 0.5, type=float)
-    issue_type = request.args.get('issue_type')
-
-    if not lat_param or not lng_param:
-        return jsonify({'error': 'latitude and longitude parameters are required.'}), 400
-
-    try:
-        user_lat = float(lat_param)
-        user_lng = float(lng_param)
-    except ValueError:
-        return jsonify({'error': 'latitude and longitude must be valid float values.'}), 400
-
-    query = Complaint.query
+@app.get("/api/complaints/nearby", response_model=List[ComplaintResponse], tags=["Complaints"])
+def get_nearby_complaints(
+    latitude: float,
+    longitude: float,
+    radius_km: float = Query(0.5, ge=0.01),
+    issue_type: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Complaint)
     if issue_type:
         query = query.filter(Complaint.issue_type == issue_type.lower())
 
@@ -342,16 +381,23 @@ def get_nearby_complaints():
     nearby_list = []
     
     for c in all_complaints:
-        dist = haversine_distance(user_lat, user_lng, c.latitude, c.longitude)
-        if dist <= radius_param:
+        dist = haversine_distance(latitude, longitude, c.latitude, c.longitude)
+        if dist <= radius_km:
             dict_rep = c.to_dict()
             dict_rep['distance_km'] = round(dist, 3)
+            # Add required response compatibility layer
             nearby_list.append(dict_rep)
 
     # Sort by distance
     nearby_list.sort(key=lambda x: x['distance_km'])
-    return jsonify(nearby_list), 200
+    return nearby_list
 
-if __name__ == "__main__":
+# --- Static Frontend Serving ---
+# Mounts the frontend static folder to the root URL space. html=True automatically redirects / to /index.html!
+app.mount("/", StaticFiles(directory="../frontend", html=True), name="static")
+
+if __name__ == '__main__':
+    import uvicorn
+    # Local fallback start uvicorn
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)

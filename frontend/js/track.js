@@ -1,7 +1,7 @@
 // WaterWatch API Base URL Configuration
-const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port !== '5000'
-  ? 'http://localhost:5000/api'
-  : window.location.origin + '/api';
+const API_BASE_URL = window.location.origin.startsWith('file://') || window.location.hostname === ''
+  ? 'http://localhost:10000/api'
+  : (window.location.port === '3000' ? 'http://localhost:10000/api' : window.location.origin + '/api');
 
 // Toast Utilities
 function showToast(message, type = 'success') {
@@ -150,9 +150,9 @@ async function trackComplaint(displayId) {
     }
   } catch (err) {
     console.error("Tracking lookup error:", err);
-    showToast("Server connection error. Ensure Flask backend is running.", "danger");
+    showToast("Server connection error. Ensure the backend server is running.", "danger");
     errorSection.style.display = 'block';
-    document.getElementById('errorMessage').textContent = "Cannot connect to server. Ensure Flask backend is running on port 5000.";
+    document.getElementById('errorMessage').textContent = "Cannot connect to server. Ensure the backend server is running.";
   }
 }
 
